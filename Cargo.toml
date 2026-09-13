@@ -1,0 +1,49 @@
+[package]
+name = "gradido-blockchain-zk"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+authors = ["einhornimmond <info@einhornimmond.de>"]
+description = "Shielded transfers for the Gradido blockchain: halo2 circuits with exact decay, keys, note encryption, a C ABI for the node and a WebAssembly signer"
+license = "Apache-2.0"
+repository = "https://github.com/gradido/gradido-blockchain-zk"
+
+[lib]
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[dependencies]
+halo2_gadgets = "0.5"
+pasta_curves = "0.5"
+ff = "0.13"
+rand = "0.8"
+group = "0.13"
+sinsemilla = { version = "0.1", features = ["test-dependencies"] }
+rand_core = "0.6"
+# the surroundings: keys, addresses, encryption, signatures
+reddsa = "0.5"
+zcash_note_encryption = "0.4"
+f4jumble = "0.1"
+bech32 = "0.11"
+blake2b_simd = "1"
+chacha20poly1305 = "0.10"
+bridgetree = "0.7"
+incrementalmerkletree = "0.8"
+prost = "0.13"
+
+[profile.release]
+opt-level = 3
+codegen-units = 1
+
+# native: halo2 with rayon, so proving uses every core
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+halo2_proofs = { version = "0.3.5", features = ["batch", "multicore"] }
+
+# WebAssembly: no rayon (it needs the atomics target feature, see README), and getrandom has
+# to be told to use the browser's crypto API
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+halo2_proofs = { version = "0.3.5", default-features = false, features = ["batch"] }
+getrandom = { version = "0.2", features = ["js"] }
+# the JavaScript interface of the signing device (src/wasm.rs); the wasm-bindgen CLI that
+# generates the JS glue must have exactly the version in Cargo.lock
+wasm-bindgen = "0.2.100"
+js-sys = "0.3"

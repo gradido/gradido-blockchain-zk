@@ -1,0 +1,31 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>gradido-blockchain-zk signer</title>
+<pre id="log"></pre>
+<script type="module">
+  // The device in a browser, served by `cargo run --release --example wasm_roundtrip --browser`.
+  // Loads the wasm-bindgen --target web output from /pkg/, the request from /data/, and posts
+  // the signatures (or the error) back to the example.
+  import init, * as zk from "/pkg/gradido_blockchain_zk.js";
+  import { runChecks } from "/test/wasm_signer_checks.mjs";
+
+  const lines = [];
+  const io = {
+    read: async (name) => new Uint8Array(await (await fetch(`/data/${name}`)).arrayBuffer()),
+    text: async (name) => (await fetch(`/data/${name}`)).text(),
+    log: (line) => {
+      lines.push(line);
+      document.getElementById("log").textContent = lines.join("\n");
+    },
+  };
+  try {
+    await init();
+    io.log(`running in ${navigator.userAgent}`);
+    const signatures = await runChecks(zk, io);
+    await fetch("/log", { method: "POST", body: lines.join("\n") });
+    await fetch("/signatures", { method: "POST", body: signatures });
+  } catch (e) {
+    await fetch("/log", { method: "POST", body: lines.join("\n") });
+    await fetch("/error", { method: "POST", body: String(e.stack ?? e) });
+  }
+</script>

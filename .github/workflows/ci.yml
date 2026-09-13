@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Rust tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --release
+      - run: cargo build --release --all-targets
+
+  c-abi:
+    name: C ABI smoke tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release
+      - run: |
+          gcc -std=c11 -Wall -Wextra -Iinclude test/smoke.c -o smoke target/release/libgradido_blockchain_zk.a -lpthread -ldl -lm
+          ./smoke
+      - run: |
+          mkdir -p sample
+          cargo run --release --example wire_sample sample
+          gcc -std=c11 -Wall -Wextra -Iinclude test/bundle_smoke.c -o bundle_smoke target/release/libgradido_blockchain_zk.a -lpthread -ldl -lm
+          ./bundle_smoke sample
+
+  wasm:
+    name: WebAssembly signer in Node.js and Chrome
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: wasm-bindgen CLI in the version of Cargo.lock
+        run: |
+          version=$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | sed -n 's/^version = "\(.*\)"$/\1/p')
+          cargo install wasm-bindgen-cli --version "$version" --locked
+      - run: cargo build --release --target wasm32-unknown-unknown --lib
+      - run: |
+          wasm-bindgen --target nodejs --out-dir pkg-node target/wasm32-unknown-unknown/release/gradido_blockchain_zk.wasm
+          wasm-bindgen --target web --out-dir pkg-web target/wasm32-unknown-unknown/release/gradido_blockchain_zk.wasm
+      - run: cargo run --release --example wasm_roundtrip pkg-node
+      - run: cargo run --release --example wasm_roundtrip -- --browser google-chrome pkg-web
+
+  decay-vectors:
+    name: Decay vectors match gradido-blockchain-core
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: gradido/gradido-blockchain-core
+          path: gradido-blockchain-core
+      - uses: actions/checkout@v4
+        with:
+          repository: gradido/arnm
+          path: arnm
+      - run: |
+          C=gradido-blockchain-core; A=arnm
+          gcc -O2 -std=c11 -I$C/include -I$C/third_party -I$A/include test/gen_decay_vectors.c \
+              $C/src/data/unit.c $C/third_party/fp256/src/*.c $A/src/converter.c -lm -o gen
+          ./gen > regenerated.csv
+          diff -q test/decay_vectors.csv regenerated.csv
