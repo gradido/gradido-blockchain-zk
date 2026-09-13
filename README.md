@@ -1,3 +1,5 @@
+**Warning It is currently entirly vibe-coded (written by AI).**
+
 # gradido-blockchain-zk
 
 Shielded transfers for the Gradido blockchain, after the Zcash Orchard model: halo2 circuits
